@@ -32,6 +32,15 @@ This experiment compares three energy-aware routing approaches across different 
   - No network decomposition
 - **Implementation**: `baselines/rl_energy_routing.py`
 
+
+### 4. **DQN-based energy-efficient routing algorithm in software-defined networks**
+- **Paper**: "Reinforcement Learning and Energy-Aware Routing"
+- **Description**: Basic Q-learning without clustering
+- **Key Features**:
+  - Tabular Q-learning
+  - Global state representation
+  - No network decomposition
+- **Implementation**: `baselines/rl_energy_routing.py`
 ---
 
 ## Experimental Setup
