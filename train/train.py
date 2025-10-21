@@ -8,6 +8,7 @@ import sys
 
 from env import SDNEnv
 from agent import HierarchicalDQN
+from visualize_clusters import visualize_clusters_from_env
 
 # Global flag for graceful shutdown
 shutdown_requested = False
@@ -34,7 +35,6 @@ class TrainingVisualizer:
         self.episode_losses = []
         self.episode_energy_savings = []
         self.episode_latencies = []
-        self.episode_sla_violations = []
         self.episode_active_links = []
         self.episode_cluster_counts = []
         self.episode_computation_times = []
@@ -45,13 +45,12 @@ class TrainingVisualizer:
         self.step_energy_savings = []
         self.step_latencies = []
         
-    def log_episode(self, episode, reward, loss, energy_saving, latency, sla_viol, active_links, cluster_count=1, computation_time=0.0):
+    def log_episode(self, episode, reward, loss, energy_saving, latency, active_links, cluster_count=1, computation_time=0.0):
         """Log episode-level metrics"""
         self.episode_rewards.append(reward)
         self.episode_losses.append(loss if loss is not None else 0.0)
         self.episode_energy_savings.append(energy_saving)
         self.episode_latencies.append(latency)
-        self.episode_sla_violations.append(sla_viol)
         self.episode_active_links.append(active_links)
         self.episode_cluster_counts.append(cluster_count)
         self.episode_computation_times.append(computation_time)
@@ -97,11 +96,11 @@ class TrainingVisualizer:
         axes[1, 0].set_ylabel('Latency (ms)')
         axes[1, 0].grid(True)
         
-        # SLA violations
-        axes[1, 1].plot(self.episode_sla_violations, 'orange', alpha=0.7)
-        axes[1, 1].set_title('SLA Violations (%)')
+        # Active links
+        axes[1, 1].plot(self.episode_active_links, 'orange', alpha=0.7)
+        axes[1, 1].set_title('Active Links')
         axes[1, 1].set_xlabel('Episode')
-        axes[1, 1].set_ylabel('SLA Violation %')
+        axes[1, 1].set_ylabel('Active Links')
         axes[1, 1].grid(True)
         
         # Active links
@@ -123,7 +122,6 @@ class TrainingVisualizer:
             'loss': self.episode_losses,
             'energy_saving': self.episode_energy_savings,
             'latency': self.episode_latencies,
-            'sla_violations': self.episode_sla_violations,
             'active_links': self.episode_active_links,
             'cluster_count': self.episode_cluster_counts,
             'computation_time': self.episode_computation_times
@@ -139,10 +137,20 @@ class TrainingVisualizer:
             'loss': self.episode_losses[-1] if self.episode_losses else 0.0,
             'energy_saving': self.episode_energy_savings[-1],
             'latency': self.episode_latencies[-1],
-            'sla_violations': self.episode_sla_violations[-1],
             'active_links': self.episode_active_links[-1],
             'cluster_count': self.episode_cluster_counts[-1] if self.episode_cluster_counts else 1
         }
+
+def get_device():
+    """Auto-detect best available device (CUDA/CPU)"""
+    if torch.cuda.is_available():
+        device = "cuda"
+        print(f"✅ Using GPU: {torch.cuda.get_device_name(0)}")
+        print(f"   GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+    else:
+        device = "cpu"
+        print("⚠️  No GPU available, using CPU")
+    return device
 
 def run_training(cfg_path="config.json", traffic_mode=None):
     """Run enhanced training with traffic load mode selection"""
@@ -152,6 +160,10 @@ def run_training(cfg_path="config.json", traffic_mode=None):
     # Load configuration
     with open(cfg_path, 'r') as f:
         cfg = json.load(f)['config']
+    
+    # Auto-detect device (override config)
+    device = get_device()
+    cfg['device'] = device
     
     # Override traffic mode if specified
     if traffic_mode and traffic_mode in cfg.get("traffic_modes", {}):
@@ -171,7 +183,7 @@ def run_training(cfg_path="config.json", traffic_mode=None):
     # Initialize environment and agent
     env = SDNEnv(cfg)
     obs = env.reset()
-    agent = HierarchicalDQN(obs_dim=obs.shape[0], action_n=env.action_n, cfg=cfg, device=cfg.get("device","cpu"))
+    agent = HierarchicalDQN(obs_dim=obs.shape[0], action_n=env.action_n, cfg=cfg, device=device)
     
     # Initialize visualizer
     visualizer = TrainingVisualizer()
@@ -250,7 +262,6 @@ def run_training(cfg_path="config.json", traffic_mode=None):
         avg_energy_saving = np.mean(step_energy_savings) if step_energy_savings else 0.0
         avg_latency = np.mean(step_latencies) if step_latencies else 0.0
         avg_utilization = np.mean(step_utilizations) if step_utilizations else 0.0
-        sla_violations = info.get('sla_violations', info.get('sla_viol', 0.0))
         active_links = info.get('active_links', 0)
         
         # Clustering statistics
@@ -260,7 +271,7 @@ def run_training(cfg_path="config.json", traffic_mode=None):
         avg_computation_time = np.mean(step_computation_times) if step_computation_times else 0.0
         
         # Log episode metrics
-        visualizer.log_episode(ep + 1, total_r, avg_loss, avg_energy_saving, avg_latency, sla_violations, active_links, clustering_stats['current_cluster_count'], avg_computation_time)
+        visualizer.log_episode(ep + 1, total_r, avg_loss, avg_energy_saving, avg_latency, active_links, clustering_stats['current_cluster_count'], avg_computation_time)
         ep_rewards.append(total_r)
         
         # Save best model
@@ -270,11 +281,15 @@ def run_training(cfg_path="config.json", traffic_mode=None):
             torch.save(agent.q.state_dict(), model_name)
             print(f"💾 New best model saved! Reward: {total_r:.2f}")
         
-        # Save model every 10 episodes
+        # Save model every 10 episodes (more frequent on Colab)
         if (ep + 1) % 10 == 0:
             checkpoint_name = f"checkpoint_{current_mode}_episode_{ep + 1}.pth"
             torch.save(agent.q.state_dict(), checkpoint_name)
             print(f"💾 Checkpoint saved at episode {ep + 1}")
+            
+            # Clear GPU cache periodically if using CUDA
+            if device == "cuda":
+                torch.cuda.empty_cache()
         
         # Enhanced progress logging with utilization and clustering
         target_min, target_max = env.target_util_range
@@ -307,7 +322,6 @@ def run_training(cfg_path="config.json", traffic_mode=None):
               f"Loss: {avg_loss:6.4f} | "
               f"EnergySave: {avg_energy_saving*100:5.1f}% | "
               f"Latency: {avg_latency:6.2f}ms | "
-              f"SLA: {sla_violations:5.1f}% | "
               f"Links: {active_links}/{total_links} | "
               f"Flows: {len(env._flows):3d} | "
               f"Util: {actual_util:6.1f}% {util_status} | "
@@ -317,6 +331,16 @@ def run_training(cfg_path="config.json", traffic_mode=None):
         if (ep + 1) % 10 == 0:
             visualizer.plot_training_curves(ep + 1)
             visualizer.save_metrics(ep + 1)
+            
+            # Visualize clusters (topology + feature space)
+            try:
+                print(f"📊 Generating cluster visualizations for episode {ep + 1}...")
+                topo_path, feat_path, comp_path = visualize_clusters_from_env(env, ep + 1)
+                print(f"   ✅ Topology: {topo_path}")
+                print(f"   ✅ Features: {feat_path}")
+                print(f"   ✅ Comparison: {comp_path}")
+            except Exception as e:
+                print(f"   ⚠️  Cluster visualization failed: {e}")
     
     # Final model save
     final_model_name = f"final_model_{current_mode}.pth"
@@ -347,7 +371,6 @@ def run_training(cfg_path="config.json", traffic_mode=None):
         'avg_reward': np.mean(ep_rewards),
         'final_energy_saving': avg_energy_saving,
         'final_latency': avg_latency,
-        'final_sla_violations': sla_violations,
         'final_utilization': final_util_stats['average_utilization'],
         'traffic_mode': current_mode,
         'final_path': final_model_name,

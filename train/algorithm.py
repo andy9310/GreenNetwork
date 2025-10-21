@@ -87,52 +87,42 @@ class PriorityBasedDeactivation(LinkDeactivationAlgorithm):
         
         return deactivated
 
-class SLAEnhancedHeuristic(LinkDeactivationAlgorithm):
+class EnhancedHeuristic(LinkDeactivationAlgorithm):
     """
-    增強版啟發式演算法，包含SLA考量
-    輸出5個門檻值：buffer_threshold, growth_rate_threshold, link_usage_threshold, 
-    sla_safety_margin, overload_threshold
+    Enhanced heuristic algorithm for link deactivation
+    Uses buffer threshold, growth rate, and link usage
     """
     
     def __init__(self):
-        self.buffer_history = {}  # 記錄每個節點的buffer歷史
-        self.growth_rates = {}   # 記錄成長率
-        self.sla_violations = 0  # SLA違反計數
+        self.buffer_history = {}  # Track node buffer history
+        self.growth_rates = {}   # Track growth rates
         
     def deactivate_links(self, graph, cluster_info, threshold, flows=None, 
                         buffer_threshold=0.3, growth_rate_threshold=0.3,
-                        link_usage_threshold=0.5, sla_safety_margin=0.1,
-                        overload_threshold=0.9, **kwargs):
+                        link_usage_threshold=0.5, overload_threshold=0.9, **kwargs):
         """
-        執行SLA增強的啟發式演算法
+        Execute enhanced heuristic algorithm
         
         Args:
-            buffer_threshold: buffer長度門檻 (0-1)
-            growth_rate_threshold: 成長率門檻 (0-1)
-            link_usage_threshold: 連結使用率門檻 (0-1)
-            sla_safety_margin: SLA安全邊際 (0-1)
-            overload_threshold: 過載門檻 (0-1)
+            buffer_threshold: buffer length threshold (0-1)
+            growth_rate_threshold: growth rate threshold (0-1)
+            link_usage_threshold: link usage threshold (0-1)
+            overload_threshold: overload threshold (0-1)
         """
         deactivated = []
         
-        # 1. 識別低負載節點
+        # 1. Identify low load nodes
         low_load_nodes = self._identify_low_load_nodes(
             graph, cluster_info, buffer_threshold, growth_rate_threshold
         )
         
-        # 2. 找出可關閉的連結
+        # 2. Find candidate links to close
         candidate_links = self._find_candidate_links_to_close(
             graph, cluster_info, low_load_nodes, link_usage_threshold
         )
         
-        # 3. SLA約束檢查
-        safe_links_to_close = []
+        # 3. Execute closure with traffic redirection
         for link in candidate_links:
-            if self._is_sla_safe_to_close(graph, link, flows, sla_safety_margin):
-                safe_links_to_close.append(link)
-        
-        # 4. 執行關閉並重導向流量
-        for link in safe_links_to_close:
             if self._redirect_traffic_safely(graph, link, overload_threshold):
                 graph[link[0]][link[1]]["active"] = 0
                 deactivated.append(link)
@@ -140,30 +130,29 @@ class SLAEnhancedHeuristic(LinkDeactivationAlgorithm):
         return deactivated
     
     def _identify_low_load_nodes(self, graph, cluster_info, buffer_threshold, growth_rate_threshold):
-        """識別低負載節點"""
+        """Identify low load nodes"""
         low_load_nodes = []
         
         for node in cluster_info.nodes:
-            # 計算buffer長度 (模擬)
+            # Calculate buffer length (simulated)
             buffer_length = self._calculate_buffer_length(graph, node)
             
-            # 計算成長率
+            # Calculate growth rate
             growth_rate = self._calculate_growth_rate(node)
             
-            # 檢查是否為低負載
+            # Check if low load
             if buffer_length < buffer_threshold and growth_rate < growth_rate_threshold:
                 low_load_nodes.append(node)
         
         return low_load_nodes
     
     def _calculate_buffer_length(self, graph, node):
-        """計算節點的buffer長度 (模擬)"""
-        # 基於節點度數和鄰居使用率估算
+        """Calculate node buffer length (simulated)"""
         degree = graph.degree(node)
         if degree == 0:
             return 0.0
         
-        # 計算鄰居的平均使用率
+        # Calculate average neighbor utilization
         neighbor_utilization = 0.0
         neighbor_count = 0
         
@@ -176,23 +165,22 @@ class SLAEnhancedHeuristic(LinkDeactivationAlgorithm):
         
         avg_neighbor_util = neighbor_utilization / max(1, neighbor_count)
         
-        # Buffer長度與使用率成反比
+        # Buffer length inversely proportional to utilization
         buffer_length = max(0.0, 1.0 - avg_neighbor_util)
         return buffer_length
     
     def _calculate_growth_rate(self, node):
-        """計算節點的成長率"""
+        """Calculate node growth rate"""
         if node not in self.buffer_history:
             self.buffer_history[node] = []
             self.growth_rates[node] = 0.0
             return 0.0
         
-        # 計算過去5秒的成長率
         history = self.buffer_history[node]
         if len(history) < 2:
             return 0.0
         
-        # 簡單的線性成長率計算
+        # Simple linear growth rate calculation
         recent_values = history[-5:] if len(history) >= 5 else history
         if len(recent_values) < 2:
             return 0.0
@@ -202,84 +190,39 @@ class SLAEnhancedHeuristic(LinkDeactivationAlgorithm):
         return growth_rate
     
     def _find_candidate_links_to_close(self, graph, cluster_info, low_load_nodes, link_usage_threshold):
-        """找出可關閉的連結候選"""
+        """Find candidate links to close"""
         candidate_links = []
         
         for node in low_load_nodes:
             for neighbor in graph.neighbors(node):
-                if neighbor in cluster_info.nodes:  # 只考慮cluster內的連結
+                if neighbor in cluster_info.nodes:
                     edge_data = graph[node][neighbor]
                     utilization = edge_data.get("utilization", 0.0)
                     
-                    # 保留高使用率的連結
                     if utilization < link_usage_threshold:
                         candidate_links.append((node, neighbor))
         
         return candidate_links
     
-    def _is_sla_safe_to_close(self, graph, link, flows, sla_safety_margin):
-        """檢查關閉連結是否安全 (不會違反SLA)"""
-        if not flows:
-            return True
-        
-        # 模擬關閉連結
-        original_state = graph[link[0]][link[1]].get("active", 1)
-        graph[link[0]][link[1]]["active"] = 0
-        
-        # 檢查每個flow是否還能滿足SLA
-        sla_violations = 0
-        for flow in flows:
-            if self._would_violate_sla(flow, graph):
-                sla_violations += 1
-        
-        # 恢復原始狀態
-        graph[link[0]][link[1]]["active"] = original_state
-        
-        # 如果違反率超過安全邊際，則不安全
-        violation_rate = sla_violations / max(1, len(flows))
-        return violation_rate <= sla_safety_margin
-    
-    def _would_violate_sla(self, flow, graph):
-        """檢查特定flow是否會違反SLA"""
-        try:
-            # 計算新路徑的延遲
-            path = nx.shortest_path(graph, flow.s, flow.t, weight="delay_ms")
-            total_delay = 0.0
-            
-            for i in range(len(path) - 1):
-                u, v = path[i], path[i + 1]
-                if graph.has_edge(u, v):
-                    edge_data = graph[u][v]
-                    total_delay += edge_data.get("delay_ms", 0.0)
-            
-            # 檢查是否超過SLA門檻
-            sla_threshold = self._get_sla_threshold(flow.prio)
-            return total_delay > sla_threshold
-            
-        except (nx.NetworkXNoPath, nx.NodeNotFound):
-            return True  # 無法找到路徑視為違反SLA
-    
-    def _get_sla_threshold(self, priority):
-        """根據優先級獲取SLA門檻"""
-        sla_thresholds = {1: 1.0, 2: 2.0, 3: 4.0, 4: 6.0, 5: 8.0, 6: 10.0}
-        return sla_thresholds.get(priority, 10.0)
-    
     def _redirect_traffic_safely(self, graph, link, overload_threshold):
-        """安全地重導向流量"""
-        # 檢查重導向後是否會造成過載
-        affected_links = self._get_affected_links(graph, link)
+        """Safely redirect traffic"""
+        u, v = link
         
-        for affected_link in affected_links:
-            u, v = affected_link
-            if graph.has_edge(u, v):
-                current_util = graph[u][v].get("utilization", 0.0)
-                # 模擬重導向後的負載
-                new_util = current_util + 0.1  # 假設增加10%負載
-                
-                if new_util > overload_threshold:
-                    return False  # 會造成過載，不關閉
+        # Find alternative paths
+        alternative_paths = []
+        for neighbor_u in graph.neighbors(u):
+            if neighbor_u != v and graph.has_edge(neighbor_u, v):
+                alternative_paths.append((neighbor_u, v))
         
-        return True
+        # Check if alternative paths would overload
+        for alt_u, alt_v in alternative_paths:
+            edge_data = graph[alt_u][alt_v]
+            utilization = edge_data.get("utilization", 0.0)
+            
+            if utilization < overload_threshold:
+                return True  # Found safe alternative path
+        
+        return False  # No safe alternative path
     
     def _get_affected_links(self, graph, closed_link):
         """獲取受影響的連結"""
@@ -298,23 +241,22 @@ class SLAEnhancedHeuristic(LinkDeactivationAlgorithm):
         return affected
 
 class HeuristicThresholdModel:
-    """輸出啟發式演算法門檻值的模型"""
+    """Model for outputting heuristic algorithm threshold values"""
     
-    def __init__(self, obs_dim, action_dim=5):
+    def __init__(self, obs_dim, action_dim=4):
         """
         Args:
-            obs_dim: 觀察空間維度
-            action_dim: 動作空間維度 (5個門檻值)
+            obs_dim: Observation space dimension
+            action_dim: Action space dimension (4 thresholds)
         """
         self.obs_dim = obs_dim
         self.action_dim = action_dim
         
-        # 門檻值範圍
+        # Threshold ranges
         self.threshold_ranges = {
             'buffer_threshold': (0.1, 0.8),
             'growth_rate_threshold': (0.1, 0.8), 
             'link_usage_threshold': (0.2, 0.9),
-            'sla_safety_margin': (0.05, 0.3),
             'overload_threshold': (0.7, 0.95)
         }
     
@@ -328,23 +270,20 @@ class HeuristicThresholdModel:
         # 根據網路負載調整門檻值
         avg_utilization = network_state.get('avg_utilization', 0.5)
         
-        if avg_utilization < 0.3:  # 低負載
+        if avg_utilization < 0.3:  # Low load
             thresholds['buffer_threshold'] = 0.2
             thresholds['growth_rate_threshold'] = 0.2
             thresholds['link_usage_threshold'] = 0.3
-            thresholds['sla_safety_margin'] = 0.1
             thresholds['overload_threshold'] = 0.8
-        elif avg_utilization < 0.6:  # 中負載
+        elif avg_utilization < 0.6:  # Medium load
             thresholds['buffer_threshold'] = 0.4
             thresholds['growth_rate_threshold'] = 0.4
             thresholds['link_usage_threshold'] = 0.5
-            thresholds['sla_safety_margin'] = 0.15
             thresholds['overload_threshold'] = 0.85
-        else:  # 高負載
+        else:  # High load
             thresholds['buffer_threshold'] = 0.6
             thresholds['growth_rate_threshold'] = 0.6
             thresholds['link_usage_threshold'] = 0.7
-            thresholds['sla_safety_margin'] = 0.2
             thresholds['overload_threshold'] = 0.9
         
         return thresholds

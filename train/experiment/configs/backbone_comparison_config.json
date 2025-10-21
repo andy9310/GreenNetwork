@@ -1,0 +1,69 @@
+{
+  "experiment_suite": "backbone_network_heterogeneity_comparison",
+  "description": "比較兩種骨幹網路拓樸在相同規模但不同流量分佈下的表現",
+  
+  "common_parameters": {
+    "num_nodes": 80,
+    "num_edges": 200,
+    "num_hosts": 60,
+    "num_regions": 3,
+    "edge_capacity_mean": 10.0,
+    "edge_capacity_std": 2.0,
+    "average_traffic_load": 0.4,
+    "episodes": 2000,
+    "max_steps_per_episode": 200
+  },
+  
+  "topologies": [
+    {
+      "name": "topology_A_core_heavy",
+      "config_file": "backbone_topology_A.json",
+      "type": "核心-邊緣架構",
+      "characteristics": {
+        "structure": "集中式核心骨幹",
+        "core_nodes": 20,
+        "edge_nodes": 60,
+        "high_traffic_region": "核心骨幹區 (region_0)",
+        "traffic_pattern": "高流量集中在核心，邊緣流量較低",
+        "peak_times": {
+          "region_0": "20-100步 (核心高峰)",
+          "region_1": "0-60步 (東部邊緣)",
+          "region_2": "120-180步 (西部邊緣)"
+        }
+      }
+    },
+    {
+      "name": "topology_B_edge_heavy",
+      "config_file": "backbone_topology_B.json",
+      "type": "分散式網狀架構",
+      "characteristics": {
+        "structure": "分散式區域網狀",
+        "mesh_density": 0.4,
+        "regional_hubs": 3,
+        "high_traffic_region": "北部和南部邊緣區 (region_0, region_2)",
+        "traffic_pattern": "高流量分散在邊緣，核心流量較低",
+        "peak_times": {
+          "region_0": "0-70步 (北部邊緣高峰)",
+          "region_1": "140-200步 (中央轉接)",
+          "region_2": "70-140步 (南部邊緣高峰)"
+        }
+      }
+    }
+  ],
+  
+  "comparison_metrics": [
+    "total_energy_consumption",
+    "average_latency",
+    "sla_violation_rate",
+    "link_utilization_distribution",
+    "clustering_efficiency",
+    "regional_performance_variance"
+  ],
+  
+  "expected_insights": [
+    "核心-邊緣架構在集中式流量下的能耗效率",
+    "分散式架構在邊緣流量下的負載平衡能力",
+    "不同拓樸結構對動態聚類演算法的影響",
+    "區域異質性對整體網路性能的影響"
+  ]
+}

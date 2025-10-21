@@ -52,6 +52,13 @@ class HierarchicalDQN:
         self.qt.load_state_dict(self.q.state_dict())
         self.optim = optim.Adam(self.q.parameters(), lr=cfg["lr"])
         self.rb = ReplayBuffer(cfg["buffer_size"])
+        
+        # Print device info
+        if device == "cuda":
+            import torch
+            print(f" Agent initialized on GPU: {torch.cuda.get_device_name(0)}")
+        else:
+            print(" Agent initialized on CPU")
 
         self.eps = cfg["epsilon_start"]
         self.eps_end = cfg["epsilon_end"]

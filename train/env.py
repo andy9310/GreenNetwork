@@ -38,8 +38,6 @@ class SDNEnv:
         self.recluster_every = cfg["recluster_every_steps"]
         self.cluster_bins = np.array(cfg["cluster_threshold_bins"], dtype=float)
         self.inter_keep_opts = cfg["inter_cluster_keep_min"]
-        # self.prio_weights = {int(k): v for k, v in cfg["priority_weights"].items()}
-        self.sla_latency_ms = {int(k): v for k, v in cfg["sla_latency_ms"].items()}
 
         # NEW: Traffic load management
         self.traffic_load_mode = cfg.get("traffic_load_mode", "low")
@@ -241,17 +239,16 @@ class SDNEnv:
         self._generate_new_flows()
 
         # Route flows and compute latency/energy
-        latency_ms, sla_viol_pct, utilization = self._route_and_measure()
+        latency_ms, utilization = self._route_and_measure()
 
         energy = self._energy_cost()
         # Reward: energy saving positive, latency & SLA viol negative (weighted)
         base_all_on = self.energy_on * self.G_full.number_of_edges()
         energy_saving = (base_all_on - energy) / base_all_on
         
-        # Balanced penalty for SLA violations and overload
+        # Balanced penalty for overload
         # Strong enough to matter, but allows agent to learn trade-offs
         latency_penalty = 0.001 * latency_ms
-        sla_penalty = 0.05 * sla_viol_pct  # 5× stronger (was 0.1, reduced from 10×)
         
         # EXTREME overload penalty - overload should NEVER happen in real networks
         util_stats = self.get_current_utilization_stats()
@@ -268,7 +265,7 @@ class SDNEnv:
             excess = avg_util_pct - 80.0
             overload_penalty = 0.1 * (excess ** 1.5)  # Exponential growth: 0.2 at 84%, 0.9 at 90%, 2.8 at 100%
         
-        penalty = latency_penalty + sla_penalty + overload_penalty
+        penalty = latency_penalty + overload_penalty
         reward = energy_saving - penalty
 
         self._time += 1
@@ -287,7 +284,6 @@ class SDNEnv:
         info = {
             "energy": energy, 
             "latency_ms": latency_ms, 
-            "sla_viol": sla_viol_pct, 
             "energy_saving": energy_saving,
             "active_links": active_links_count
         }
@@ -392,7 +388,6 @@ class SDNEnv:
         
         util = {(u, v): 0.0 for u, v in self.G_full.edges()}
         total_latency_ms = 0.0
-        sla_viol = 0
         total_flows = len(self._flows)
 
         # prebuild active subgraph
@@ -407,9 +402,8 @@ class SDNEnv:
             except Exception:
                 path = None
             if path is None:
-                # penalize unserved flow: large latency + SLA violation
+                # penalize unserved flow: large latency
                 total_latency_ms += 50.0
-                sla_viol += 1
                 continue
 
             # base latency
@@ -442,13 +436,9 @@ class SDNEnv:
 
             flow_latency = base + edge_delay
             total_latency_ms += flow_latency
-            # SLA check
-            if flow_latency > self.sla_latency_ms[f.prio]:
-                sla_viol += 1
 
-        # Calculate average latency and SLA violation percentage
+        # Calculate average latency
         avg_latency = total_latency_ms / max(1, total_flows)
-        sla_viol_pct = (sla_viol / max(1, total_flows)) * 100.0
         
         # normalize util to fraction and store in graph
         util_frac = {}
@@ -457,7 +447,7 @@ class SDNEnv:
             util_frac[(u, v)] = load / max(cap, 1e-6)
             # Store utilization in graph for later retrieval
             self.G_full[u][v]["utilization"] = util_frac[(u, v)]
-        return avg_latency, sla_viol_pct, util_frac
+        return avg_latency, util_frac
 
     def _energy_cost(self) -> float:
         on = 0

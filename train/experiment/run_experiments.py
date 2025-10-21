@@ -108,9 +108,11 @@ class ExperimentRunner:
     
     def _run_dqn(self, config, episodes):
         """Run DQN with clustering"""
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         env = SDNEnv(config)
         obs = env.reset()
-        agent = HierarchicalDQN(obs_dim=obs.shape[0], action_n=env.action_n, cfg=config, device='cpu')
+        agent = HierarchicalDQN(obs_dim=obs.shape[0], action_n=env.action_n, cfg=config, device=device)
         
         rewards = []
         energy_savings = []
@@ -273,7 +275,7 @@ class ExperimentRunner:
         
         return {
             'seed': 42,
-            'device': 'cpu',
+            'device': 'cuda' if __import__('torch').cuda.is_available() else 'cpu',
             'episodes': 100,
             'max_steps_per_episode': 200,
             'train_every': 1,

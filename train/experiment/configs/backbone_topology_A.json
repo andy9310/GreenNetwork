@@ -1,0 +1,119 @@
+{
+  "experiment_name": "backbone_topology_A",
+  "description": "骨幹網路拓樸A - 核心-邊緣架構，高流量集中在核心區域",
+  
+  "seed": 42,
+  "topology_type": "core_edge",
+  "num_nodes": 80,
+  "num_edges": 200,
+  "num_hosts": 60,
+  "num_regions": 3,
+  
+  "topology_structure": {
+    "core_nodes": 20,
+    "edge_nodes": 60,
+    "core_connectivity": 0.6,
+    "edge_to_core_ratio": 0.3,
+    "edge_connectivity": 0.15
+  },
+  
+  "edge_capacity_mean": 10.0,
+  "edge_capacity_std": 2.0,
+  "edge_base_delay_ms": 0.5,
+  "host_ratio": 0.75,
+  
+  "energy_per_link_on": 1.0,
+  "energy_per_link_sleep": 0.1,
+  "congestion_delay_factor": 2.5,
+  "routing_k_paths": 3,
+  
+  "sla_latency_ms": {
+    "1": 1.0,
+    "2": 2.0,
+    "3": 4.0,
+    "4": 8.0,
+    "5": 16.0,
+    "6": 32.0
+  },
+  
+  "traffic_load_mode": "heterogeneous_core_heavy",
+  "traffic_modes": {
+    "heterogeneous_core_heavy": {
+      "target_utilization_range": [0.3, 0.5],
+      "flow_intensity_multiplier": 2.5,
+      "peak_flow_probability": 0.8,
+      "offpeak_flow_probability": 0.4,
+      "description": "高流量集中在核心區域，邊緣區域流量較低"
+    }
+  },
+  
+  "regional_traffic_distribution": {
+    "region_0": {
+      "name": "核心骨幹區",
+      "traffic_weight": 3.0,
+      "peak_multiplier": 1.5,
+      "inter_region_probability": 0.7,
+      "intra_region_probability": 0.3
+    },
+    "region_1": {
+      "name": "東部邊緣區",
+      "traffic_weight": 1.0,
+      "peak_multiplier": 1.0,
+      "inter_region_probability": 0.6,
+      "intra_region_probability": 0.4
+    },
+    "region_2": {
+      "name": "西部邊緣區",
+      "traffic_weight": 1.0,
+      "peak_multiplier": 1.0,
+      "inter_region_probability": 0.6,
+      "intra_region_probability": 0.4
+    }
+  },
+  
+  "flow_size_bytes_min": 1000,
+  "flow_size_bytes_max": 15000,
+  "peak_flow_interval_s": [0.5, 2],
+  "offpeak_flow_interval_s": [3, 8],
+  "peak_size_range": [8000, 15000],
+  "offpeak_size_range": [1000, 5000],
+  
+  "peaks": {
+    "region_0": [20, 100],
+    "region_1": [0, 60],
+    "region_2": [120, 180]
+  },
+  
+  "recluster_every_steps": 30,
+  "cluster_threshold_bins": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
+  "inter_cluster_keep_min": [2, 3, 4, 5],
+  "deterministic_refinement": true,
+  
+  "adaptive_clustering": true,
+  "clustering_method": "dp_means_adaptive",
+  "clustering_k_range": [3, 8],
+  "dp_means_lambda": 2.5,
+  "num_clusters": 4,
+  "no_clustering": false,
+  
+  "deactivation_algorithm": "priority",
+  "max_steps_per_episode": 200,
+  "batch_size": 64,
+  
+  "device": "cpu",
+  "episodes": 2000,
+  "train_every": 1,
+  "target_update": 100,
+  "buffer_size": 100000,
+  "gamma": 0.95,
+  "lr": 0.0003,
+  "epsilon_start": 1.0,
+  "epsilon_end": 0.05,
+  "epsilon_decay_steps": 5000,
+  "use_double_dqn": true,
+  "grad_clip_norm": 1.0,
+  "obs_aggregation": "cluster",
+  
+  "eval_episodes": 5,
+  "log_every": 5
+}

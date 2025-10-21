@@ -68,16 +68,6 @@
 - Automatically finds optimal cluster count
 - Scales with network size and complexity
 
-## Performance Comparison
-
-| Method | Clusters | Time (ms) | Silhouette | Best For |
-|--------|----------|-----------|------------|----------|
-| Fixed k=3 | 3 | 15 | 0.42 | Baseline |
-| Silhouette | 6 | 1200 | 0.58 | Research |
-| Network Heuristic | 5 | 45 | 0.52 | Production |
-| **DP-means** | **7** | **180** | **0.61** | **Dynamic** |
-| **DP-means Adaptive** | **8** | **220** | **0.63** | **Best Overall** |
-
 ## Usage Examples
 
 ### 1. **Basic Usage**
@@ -133,37 +123,6 @@ python test_clustering.py
 - **Computational Time**: Algorithm overhead
 - **Adaptability**: Response to traffic changes
 
-## Files Modified/Created
-
-### Modified Files
-- ✅ `cluster.py` - Added DP-means algorithms
-- ✅ `env.py` - Updated to support DP-means
-- ✅ `config.json` - Added DP-means configuration
-- ✅ `requirements.txt` - Added sklearn, scipy
-
-### New Files
-- ✅ `DP_MEANS_ANALYSIS.md` - Detailed analysis
-- ✅ `test_clustering.py` - Updated with DP-means
-- ✅ `CLUSTERING_GUIDE.md` - Updated with DP-means
-- ✅ `QUICK_START.md` - Updated recommendations
-
-## Next Steps
-
-### 1. **Install Dependencies**
-```bash
-pip install scikit-learn scipy
-```
-
-### 2. **Test DP-means**
-```bash
-python test_clustering.py
-```
-
-### 3. **Run Training**
-```bash
-python train.py
-```
-
 ### 4. **Compare Results**
 - Monitor cluster count: `env._actual_num_clusters`
 - Compare energy efficiency
@@ -215,4 +174,3 @@ DP-means is an excellent choice for your SDN research because:
 
 ---
 
-**Your config is already set up with DP-means adaptive!** Just run `python train.py` to start using it.

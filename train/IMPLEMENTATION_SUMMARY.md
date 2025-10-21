@@ -20,12 +20,6 @@
 - ✅ Added clustering analysis to final results
 - ✅ Updated metrics CSV to include cluster count
 
-### 4. **Automated Comparison Script**
-- ✅ `compare_clustering.py` - Runs all methods automatically
-- ✅ Creates config variants for different clustering approaches
-- ✅ Analyzes and compares results
-- ✅ Generates recommendations
-- ✅ Saves detailed comparison reports
 
 ## 🎯 Available Clustering Modes
 

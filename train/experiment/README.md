@@ -32,15 +32,16 @@ This experiment compares three energy-aware routing approaches across different 
   - No network decomposition
 - **Implementation**: `baselines/rl_energy_routing.py`
 
-
-### 4. **DQN-based energy-efficient routing algorithm in software-defined networks**
-- **Paper**: "Reinforcement Learning and Energy-Aware Routing"
-- **Description**: Basic Q-learning without clustering
+### 4. **Baseline 3: DQN-based Energy-Efficient Routing (DQN-EER)**
+- **Paper**: "DQN-based energy-efficient routing algorithm in software-defined networks"
+- **Description**: Deep Q-Network for learning energy-efficient routing policies
 - **Key Features**:
-  - Tabular Q-learning
-  - Global state representation
-  - No network decomposition
-- **Implementation**: `baselines/rl_energy_routing.py`
+  - Deep neural network for function approximation
+  - Experience replay for stable learning
+  - Target network for improved convergence
+  - Handles continuous state spaces
+- **Implementation**: `baselines/dqn_energy_routing.py`
+
 ---
 
 ## Experimental Setup
@@ -67,15 +68,11 @@ We evaluate all methods on **5 different network scales**:
    - Average end-to-end latency for all flows
    - Compared to baseline (all links active)
 
-3. **SLA Violations (%)**
-   - Percentage of flows exceeding latency threshold
-   - Formula: `(violated_flows / total_flows) × 100`
-
-4. **Computation Time (seconds)**
+3. **Computation Time (seconds)**
    - Time to compute link activation decisions (how much time it cost in one action)
    - Measured per episode/iteration
 
-5. **Throughput**
+4. **Throughput**
    - Successfully routed flows per second
    - Network capacity utilization
 
@@ -90,6 +87,7 @@ experiment/
 │   ├── __init__.py
 │   ├── energy_aware_routing.py       # EAR implementation
 │   ├── rl_energy_routing.py          # RL-ER implementation
+│   ├── dqn_energy_routing.py         # DQN-EER implementation
 │   └── baseline_utils.py             # Shared utilities
 ├── configs/
 │   ├── topology_20.json              # 20 links config
@@ -121,6 +119,7 @@ python run_experiments.py --all
 python run_experiments.py --method dqn_clustering
 python run_experiments.py --method energy_aware
 python run_experiments.py --method rl_basic
+python run_experiments.py --method dqn_eer
 
 # Run specific topology
 python run_experiments.py --topology 500
@@ -151,6 +150,9 @@ python run_experiments.py --method energy_aware --topology 500 --episodes 100
 
 # Run RL-ER baseline
 python run_experiments.py --method rl_basic --topology 500 --episodes 1000
+
+# Run DQN-EER baseline
+python run_experiments.py --method dqn_eer --topology 500 --episodes 2000
 ```
 
 ### Example 2: Quick test on small topology
@@ -160,19 +162,31 @@ python run_experiments.py --method rl_basic --topology 500 --episodes 1000
 python run_experiments.py --topology 20 --episodes 100 --all
 ```
 
+### Example 3: Standalone baseline tests
+
+```bash
+# Test Energy-Aware Routing (EAR)
+python test_ear_standalone.py --links 100 --episodes 100
+
+# Test RL-based Energy Routing (RL-ER)
+python test_rler_standalone.py --links 100 --episodes 200
+
+# Test DQN-based Energy-Efficient Routing (DQN-EER)
+python test_dqn_standalone.py --links 100 --episodes 200 --train-episodes 150
+```
+
 ---
 
 ## Expected Results
 
 ### Hypothesis
 
-| Metric | Our Method (DQN+Clustering) | EAR (Heuristic) | RL-ER (Basic RL) |
-|--------|----------------------------|-----------------|------------------|
-| **Energy Saving** | 70-80% ✅ | 50-60% | 60-70% |
-| **Latency** | Low (10-15ms) ✅ | Medium (15-25ms) | Low (10-20ms) |
-| **SLA Violations** | 5-10% ✅ | 15-25% | 10-15% |
-| **Computation Time** | Medium (0.1-1s) | Fast (<0.01s) ✅ | Slow (1-10s) |
-| **Scalability** | Good ✅ | Excellent ✅ | Poor |
+| Metric | Our Method (DQN+Clustering) | EAR (Heuristic) | RL-ER (Basic RL) | DQN-EER (Deep RL) |
+|--------|----------------------------|-----------------|------------------|-------------------|
+| **Energy Saving** | 70-80% ✅ | 50-60% | 60-70% | 65-75% |
+| **Latency** | Low (10-15ms) ✅ | Medium (15-25ms) | Low (10-20ms) | Low (10-18ms) |
+| **Computation Time** | Medium (0.1-1s) | Fast (<0.01s) ✅ | Slow (1-10s) | Medium (0.05-0.5s) |
+| **Scalability** | Good ✅ | Excellent ✅ | Poor | Good |
 
 ---
 

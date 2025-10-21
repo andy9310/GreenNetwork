@@ -89,7 +89,7 @@ def test_ear(n_links=100, episodes=100, utilization_threshold=0.3, min_active_ra
                 env.G_full[u][v]['active'] = 1 if is_active else 0
             
             # Measure performance
-            latency, sla_viol, _ = env._route_and_measure()
+            latency, _ = env._route_and_measure()
             energy = env._energy_cost()
             
             # Calculate energy saving
@@ -98,7 +98,6 @@ def test_ear(n_links=100, episodes=100, utilization_threshold=0.3, min_active_ra
             
             ep_energy.append(energy_saving)
             ep_latency.append(latency)
-            ep_sla.append(sla_viol)  # Already in percentage from _route_and_measure()
             ep_active.append(len(active_links))
             
             # Generate new flows for next step
@@ -107,18 +106,15 @@ def test_ear(n_links=100, episodes=100, utilization_threshold=0.3, min_active_ra
         # Store episode averages
         energy_savings.append(np.mean(ep_energy))
         latencies.append(np.mean(ep_latency))
-        sla_violations.append(np.mean(ep_sla))
         active_links_list.append(np.mean(ep_active))
         
         # Progress update
         if (ep + 1) % 10 == 0 or ep == 0:
             recent_energy = np.mean(energy_savings[-10:])
             recent_latency = np.mean(latencies[-10:])
-            recent_sla = np.mean(sla_violations[-10:])
             print(f"  Episode {ep+1:3d}/{episodes}: "
                   f"Energy={recent_energy:5.1f}%, "
-                  f"Latency={recent_latency:5.2f}ms, "
-                  f"SLA Viol={recent_sla:5.2f}%")
+                  f"Latency={recent_latency:5.2f}ms")
     
     # Get algorithm statistics
     stats = ear.get_stats()
@@ -131,8 +127,6 @@ def test_ear(n_links=100, episodes=100, utilization_threshold=0.3, min_active_ra
         'energy_saving_std': np.std(energy_savings[-last_n:]),
         'latency': np.mean(latencies[-last_n:]),
         'latency_std': np.std(latencies[-last_n:]),
-        'sla_violations': np.mean(sla_violations[-last_n:]),
-        'sla_violations_std': np.std(sla_violations[-last_n:]),
         'computation_time': stats['avg_computation_time'],
         'avg_active_links': np.mean(active_links_list[-last_n:]),
         'total_links': env.G_full.number_of_edges()
@@ -145,7 +139,6 @@ def test_ear(n_links=100, episodes=100, utilization_threshold=0.3, min_active_ra
     print(f"\n📊 Performance Metrics:")
     print(f"  Energy Saving:       {results['energy_saving']:.2f}% ± {results['energy_saving_std']:.2f}%")
     print(f"  Latency:             {results['latency']:.2f} ± {results['latency_std']:.2f} ms")
-    print(f"  SLA Violation Rate:  {results['sla_violations']:.2f}% ± {results['sla_violations_std']:.2f}%")
     print(f"  Computation Time:    {results['computation_time']:.6f} seconds")
     print(f"\n🔗 Link Statistics:")
     print(f"  Total Links:         {results['total_links']}")
