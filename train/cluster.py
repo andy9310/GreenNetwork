@@ -25,8 +25,8 @@ def _kmeans(X: np.ndarray, k: int, max_iter: int = 50, seed: int = 42) -> Tuple[
                 centroids[j] = pts.mean(axis=0)
     return labels, centroids
 
-def featureize_graph(G: nx.Graph, traffic_in: np.ndarray, traffic_out: np.ndarray, svc_share: np.ndarray) -> np.ndarray:
-    """Build per-node feature: [degree, betweenness, in, out, svc_share...]"""
+def featureize_graph(G: nx.Graph, traffic_in: np.ndarray, traffic_out: np.ndarray) -> np.ndarray:
+    """Build per-node feature: [degree, betweenness, in, out]"""
     n = G.number_of_nodes()
     deg = np.array([G.degree(i) for i in range(n)], dtype=float)
     if n <= 200:  # betweenness is expensive; fallback for large graphs
@@ -37,7 +37,7 @@ def featureize_graph(G: nx.Graph, traffic_in: np.ndarray, traffic_out: np.ndarra
     btw = (btw - btw.mean()) / (btw.std() + 1e-6)
     tin = (traffic_in - traffic_in.mean()) / (traffic_in.std() + 1e-6)
     tout = (traffic_out - traffic_out.mean()) / (traffic_out.std() + 1e-6)
-    X = np.column_stack([deg, btw, tin, tout, svc_share])
+    X = np.column_stack([deg, btw, tin, tout])
     return X
 
 def determine_optimal_k_silhouette(X: np.ndarray, k_range: Optional[Tuple[int, int]] = None, 
@@ -387,7 +387,7 @@ def dp_means_adaptive(X: np.ndarray, lambda_range: Tuple[float, float] = (1.0, 5
     
     return best_labels, best_k, best_lambda
 
-def dynamic_clustering(G: nx.Graph, traffic_matrix: np.ndarray, svc_class_share: np.ndarray, 
+def dynamic_clustering(G: nx.Graph, traffic_matrix: np.ndarray, 
                       k: Optional[int] = None, 
                       method: str = 'silhouette',
                       k_range: Optional[Tuple[int, int]] = None,
@@ -419,7 +419,7 @@ def dynamic_clustering(G: nx.Graph, traffic_matrix: np.ndarray, svc_class_share:
     n = G.number_of_nodes()
     traffic_in = traffic_matrix.sum(axis=0)
     traffic_out = traffic_matrix.sum(axis=1)
-    X = featureize_graph(G, traffic_in, traffic_out, svc_class_share)
+    X = featureize_graph(G, traffic_in, traffic_out)
     
     # Auto-determine k if not provided
     if k is None:

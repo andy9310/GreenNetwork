@@ -3,10 +3,20 @@
 1. 解決傳統啟發式演算法與單一強化學習模型在大規模網路中面臨的全域決策困境
 
 ## Environment
-1. 200個節點2000個連結，40%的節點是邊緣節點，共80個host
+1. 40 個節點 30
 2. 整體網路劃分為三個區域，並設定其流量高峰期分別發生在不同時段，以模擬真實網路中因地理位置與應用需求差異所產生的非同步高峰
 3. 每個host每3-10s產生新的traffic flow ( 30-100 bytes ) (時間和大小隨機)，但分離尖峰時段的不同區間例如 尖峰時間每3-5s產生新的traffic flow ( 80-100 bytes )、 離峰時間每7-10s產生新的traffic flow ( 30-50 bytes )
 4. 每個 traffic flow 具有隨機的 priority 等級 (1-6)、根據大部分ISP企業規範
+
+now let's start simulate the dynamic clustering part with the dynamic traffic environment 
+now I define the environment
+Since I want to see the clustering of the nodes will not only consider regional structure of topology (link delay), but also consider the traffic amount difference between different time and region
+this is the two main feature of our math model :
+1. regional Topological Heterogeneity 
+2. Spatial Traffic Heterogeneity
+
+
+
 
 ## Architecture
 1. 在一個大型拓樸中進行動態分群，分群的依據為(流量矩陣、拓樸形狀、服務級別占比)，各自群體內自行進行決策(開關連結)

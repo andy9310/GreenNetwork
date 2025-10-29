@@ -53,39 +53,6 @@ class GreedyEnergySaving(LinkDeactivationAlgorithm):
         
         return deactivated
 
-class PriorityBasedDeactivation(LinkDeactivationAlgorithm):
-    """Priority-based algorithm considering flow priorities"""
-    
-    def deactivate_links(self, graph, cluster_info, threshold, flows=None, **kwargs):
-        """Deactivate links considering flow priorities"""
-        deactivated = []
-        
-        # Calculate link importance based on flows
-        link_importance = {}
-        for u, v in cluster_info.edges:
-            if graph.has_edge(u, v):
-                importance = 0.0
-                for flow in flows or []:
-                    if (flow.s == u and flow.t == v) or (flow.s == v and flow.t == u):
-                        # Higher priority flows get more weight
-                        priority_weight = {1: 3.0, 2: 2.0, 3: 1.5, 4: 1.2, 5: 1.0, 6: 0.5}
-                        importance += flow.size * priority_weight.get(flow.prio, 1.0)
-                
-                link_importance[(u, v)] = importance
-        
-        # Sort links by importance (least important first)
-        sorted_links = sorted(link_importance.items(), key=lambda x: x[1])
-        
-        for (u, v), importance in sorted_links:
-            if graph.has_edge(u, v):
-                edge_data = graph[u][v]
-                utilization = edge_data.get("utilization", 0.0)
-                
-                if utilization < threshold and edge_data.get("active", 1) == 1:
-                    graph[u][v]["active"] = 0
-                    deactivated.append((u, v))
-        
-        return deactivated
 
 class EnhancedHeuristic(LinkDeactivationAlgorithm):
     """
@@ -298,10 +265,9 @@ class DeterministicLinkManager:
     def __init__(self, algorithm_type: str = "greedy"):
         self.algorithm_type = algorithm_type
         self.algorithms = {
-            "greedy": GreedyEnergySaving(),
-            "priority": PriorityBasedDeactivation()
+            "greedy": GreedyEnergySaving()
         }
-        self.algorithm = self.algorithms.get(algorithm_type, GreedyEnergySaving())
+        self.algorithm = self.algorithms.get("greedy")
     
     def apply_complete_deactivation_strategy(self, graph, region_of, thresholds, inter_keep_min, flows=None):
         """Apply complete deactivation strategy"""

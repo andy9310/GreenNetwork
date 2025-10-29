@@ -3,6 +3,7 @@ import networkx as nx
 from typing import Dict, Tuple, List
 from dataclasses import dataclass
 import random
+import math
 
 from cluster import dynamic_clustering
 from algorithm import DeterministicLinkManager  # New import
@@ -12,7 +13,6 @@ class Flow:
     s: int
     t: int
     size: float
-    prio: int
     ttl: int  # steps remaining
 
 class SDNEnv:
@@ -27,8 +27,8 @@ class SDNEnv:
         self.cfg = cfg
         self.rng = random.Random(cfg.get("seed", 42))
         np.random.seed(cfg.get("seed", 42))
-        self.n = cfg["num_nodes"]
-        self.num_edges = cfg["num_edges"]
+        self.n = cfg.get("num_nodes", 0)
+        self.num_edges = cfg.get("num_edges", 0)
         self.num_regions = cfg["num_regions"]
         self.num_hosts = cfg["num_hosts"]
         self.energy_on = cfg["energy_per_link_on"]
@@ -77,7 +77,12 @@ class SDNEnv:
                 self.num_clusters = cfg.get("num_clusters", self.num_regions)
                 self.max_clusters = self.num_clusters
 
-        self._build_topology()
+        # Build or load topology
+        graphml_path = cfg.get("graphml_path")
+        if graphml_path:
+            self._load_topology_from_graphml(graphml_path, use_geo_delay=cfg.get("use_geo_delay", True))
+        else:
+            self._build_topology()
         self._assign_regions_and_hosts()
         self._time = 0
         self._flows: List[Flow] = []
@@ -95,7 +100,7 @@ class SDNEnv:
 
         # Observation / action sizes (use max_clusters for consistent dimensions)
         self.action_n = self.max_clusters * len(self.cluster_bins) + len(self.inter_keep_opts)  # thresholds for each cluster + one global inter-keep choice
-        self.obs_dim = self.max_clusters * 6 + 3  # [traffic_in, traffic_out, active_links, mean_util, svc_hi_share, svc_lo_share]*K + inter_summary(3)
+        self.obs_dim = self.max_clusters * 4 + 3  # [traffic_in, traffic_out, active_links, mean_util]*K + inter_summary(3)
         
         # Store original dimensions for agent compatibility
         self._original_obs_dim = self.obs_dim
@@ -119,13 +124,88 @@ class SDNEnv:
             G[u][v]["delay_ms"] = delay
             G[u][v]["active"] = 1
         self.G_full = G
+        self._calculate_network_capacity()
+
+    def _load_topology_from_graphml(self, path: str, use_geo_delay: bool = True):
+        Gx = nx.read_graphml(path)
+        if isinstance(Gx, (nx.MultiGraph, nx.MultiDiGraph)):
+            Gx = nx.Graph(Gx)
+        # Build mapping to consecutive int ids and extract positions if present
+        nodes = list(Gx.nodes())
+        idx_map = {n: i for i, n in enumerate(nodes)}
+        pos = {}
+        for n, data in Gx.nodes(data=True):
+            lon = None
+            lat = None
+            for k, v in data.items():
+                lk = str(k).lower()
+                if lon is None and lk in ("lon", "longitude", "x"):
+                    try:
+                        lon = float(v)
+                    except Exception:
+                        lon = None
+                if lat is None and lk in ("lat", "latitude", "y"):
+                    try:
+                        lat = float(v)
+                    except Exception:
+                        lat = None
+            if lon is not None and lat is not None:
+                pos[idx_map[n]] = (lon, lat)
+
+        G = nx.Graph()
+        G.add_nodes_from(range(len(nodes)))
+        for u, v in Gx.edges():
+            ui = idx_map[u]; vi = idx_map[v]
+            G.add_edge(ui, vi)
+
+        # Capacities
+        for u, v in G.edges():
+            cap = max(0.5, np.random.normal(self.cfg.get("edge_capacity_mean", 5.0), self.cfg.get("edge_capacity_std", 1.5)))
+            G[u][v]["capacity"] = cap
+            G[u][v]["active"] = 1
+
+        # Delays
+        if use_geo_delay and len(pos) >= 2:
+            ms_per_km = self.cfg.get("ms_per_km", 0.005)
+            def haversine(p1, p2):
+                R = 6371.0
+                lon1, lat1 = math.radians(p1[0]), math.radians(p1[1])
+                lon2, lat2 = math.radians(p2[0]), math.radians(p2[1])
+                dlon = lon2 - lon1
+                dlat = lat2 - lat1
+                a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+                return R * c
+            for u, v in G.edges():
+                if u in pos and v in pos:
+                    dist_km = haversine(pos[u], pos[v])
+                    G[u][v]["delay_ms"] = max(0.1, dist_km * ms_per_km)
+                else:
+                    G[u][v]["delay_ms"] = self.cfg.get("edge_base_delay_ms", 2.0)
+        else:
+            for u, v in G.edges():
+                G[u][v]["delay_ms"] = self.cfg.get("edge_base_delay_ms", 2.0)
+
+        self.G_full = G
+        self.n = G.number_of_nodes()
+        self.num_edges = G.number_of_edges()
+        # Spatial region assignment for traffic scheduling
+        if len(pos) == self.n and self.num_regions > 1:
+            xs = np.array([pos[i][0] for i in range(self.n)])
+            order = np.argsort(xs)
+            per = max(1, self.n // self.num_regions)
+            region_of = {}
+            for rank, node in enumerate(order):
+                region_of[node] = min(rank // per, self.num_regions - 1)
+            self.region_of = region_of
+        self._calculate_network_capacity()
 
     def _assign_regions_and_hosts(self):
-        # Partition nodes into regions by node index for reproducibility
-        per = self.n // self.num_regions
-        self.region_of = {}
-        for i in range(self.n):
-            self.region_of[i] = min(i // per, self.num_regions-1)
+        if not hasattr(self, 'region_of'):
+            per = self.n // self.num_regions
+            self.region_of = {}
+            for i in range(self.n):
+                self.region_of[i] = min(i // per, self.num_regions-1)
 
         # choose hosts from nodes with degree>=1
         candidates = [i for i in self.G_full.nodes() if self.G_full.degree(i) > 0]
@@ -167,28 +247,11 @@ class SDNEnv:
             for flow in self._flows:
                 tm[flow.s, flow.t] += flow.size
         
-        svcC = 6
-        svc_share = np.ones((n, svcC), dtype=float)
-        
-        # Build service class share from current flow priorities
-        if len(self._flows) > 0:
-            svc_count = np.zeros((n, svcC), dtype=float)
-            for flow in self._flows:
-                svc_count[flow.s, flow.prio - 1] += 1
-                svc_count[flow.t, flow.prio - 1] += 1
-            # Normalize with safe division
-            row_sums = svc_count.sum(axis=1, keepdims=True)
-            # Avoid division by zero: use epsilon for numerical stability
-            svc_share = np.divide(svc_count, row_sums, out=np.full_like(svc_count, 1.0 / svcC), where=row_sums > 0)
-        else:
-            row_sums = svc_share.sum(axis=1, keepdims=True)
-            svc_share = np.divide(svc_share, row_sums, out=np.full_like(svc_share, 1.0 / svcC), where=row_sums > 0)
-        
         # Use adaptive clustering if enabled
         if self.adaptive_clustering:
             k_range = tuple(self.clustering_k_range)
             self._cluster_map = dynamic_clustering(
-                self.G_full, tm, svc_share, 
+                self.G_full, tm, 
                 k=None,  # Let it auto-determine
                 method=self.clustering_method,
                 k_range=k_range,
@@ -217,7 +280,7 @@ class SDNEnv:
         else:
             # Fixed k clustering
             self._cluster_map = dynamic_clustering(
-                self.G_full, tm, svc_share, 
+                self.G_full, tm, 
                 k=self.num_clusters, 
                 seed=self.cfg.get("seed", 42)
             )
@@ -318,7 +381,7 @@ class SDNEnv:
         )
 
     def _generate_new_flows(self):
-        """Enhanced flow generation with traffic load control"""
+        """Enhanced flow generation with traffic load control and inter-region alternation"""
         current_step = self._time
         peaks = self.cfg["peaks"]
         host_by_region = {r: [] for r in range(self.num_regions)}
@@ -329,9 +392,15 @@ class SDNEnv:
         # Get current traffic mode settings
         traffic_config = self.current_traffic_config
         
+        # Determine rotating peak region
+        period = self.cfg.get("peak_rotation_period", self.cfg["max_steps_per_episode"])
+        rotating_peak = (current_step // max(1, period)) % self.num_regions
+
         for r in range(self.num_regions):
             lo, hi = peaks[f"region_{r}"]
             in_peak = (current_step % self.cfg["max_steps_per_episode"]) in range(lo, hi)
+            if r == rotating_peak:
+                in_peak = True
             
             # Determine flow probability based on traffic mode
             if in_peak:
@@ -342,7 +411,6 @@ class SDNEnv:
             # Apply intensity multiplier
             flow_prob = base_prob * self.flow_intensity_multiplier
             
-            # Generate flows based on calculated probability
             num_potential_flows = max(1, int(flow_prob * len(host_by_region[r]) / 2))
             
             for _ in range(num_potential_flows):
@@ -352,13 +420,27 @@ class SDNEnv:
                     # Calculate flow size based on target utilization and path length
                     flow_size = self._calculate_adaptive_flow_size(s, t, in_peak)
                     
-                    # Priority based on flow size and traffic mode
-                    prio = self._assign_priority_by_size_and_mode(flow_size, in_peak)
-                    
                     # Longer TTL for more realistic flows
                     ttl = random.randint(5, 15)
                     
-                    self._flows.append(Flow(s=s, t=t, size=flow_size, prio=prio, ttl=ttl))
+                    self._flows.append(Flow(s=s, t=t, size=flow_size, ttl=ttl))
+
+            # Inter-region flows biased to/from rotating peak
+            other_regions = [rr for rr in range(self.num_regions) if rr != r]
+            if other_regions and host_by_region[r]:
+                target_r = rotating_peak if r != rotating_peak else self.rng.choice(other_regions)
+                src_hosts = host_by_region[r]
+                dst_hosts = host_by_region[target_r]
+                if dst_hosts:
+                    inter_prob = flow_prob * 0.5
+                    inter_trials = max(1, int(inter_prob * (len(src_hosts)+len(dst_hosts)) / 4))
+                    for _ in range(inter_trials):
+                        if random.random() < inter_prob:
+                            s = self.rng.choice(src_hosts)
+                            t = self.rng.choice(dst_hosts)
+                            flow_size = self._calculate_adaptive_flow_size(s, t, r == rotating_peak)
+                            ttl = random.randint(5, 15)
+                            self._flows.append(Flow(s=s, t=t, size=flow_size, ttl=ttl))
 
         # Remove expired flows
         for f in self._flows:
@@ -488,14 +570,11 @@ class SDNEnv:
             # traffic summaries (approximate by number of active flows involving nodes in c)
             tin = sum(1 for f in self._flows if f.t in nodes)
             tout = sum(1 for f in self._flows if f.s in nodes)
-            # svc shares: hi (prio<=2) vs lo
-            hi = sum(1 for f in self._flows if ((f.s in nodes or f.t in nodes) and f.prio <= 2))
-            lo = sum(1 for f in self._flows if ((f.s in nodes or f.t in nodes) and f.prio >= 5))
-            feats.extend([float(tin), float(tout), float(active_links), float(mean_util), float(hi), float(lo)])
+            feats.extend([float(tin), float(tout), float(active_links), float(mean_util)])
 
         # Pad with zeros if using adaptive clustering and K_actual < K_max
         if self.adaptive_clustering and K_actual < K_max:
-            padding = [0.0] * 6 * (K_max - K_actual)
+            padding = [0.0] * 4 * (K_max - K_actual)
             feats.extend(padding)
 
         # Inter-cluster summary: number of active edges between different clusters

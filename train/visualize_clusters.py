@@ -432,7 +432,7 @@ def visualize_clusters_from_env(env, episode: int, save_dir: str = "cluster_visu
     # Get feature matrix
     traffic_in = env.traffic_matrix.sum(axis=0)
     traffic_out = env.traffic_matrix.sum(axis=1)
-    X = featureize_graph(env.G_full, traffic_in, traffic_out, env.svc_class_share)
+    X = featureize_graph(env.G_full, traffic_in, traffic_out)
     
     # Get active edges
     active_edges = set()
