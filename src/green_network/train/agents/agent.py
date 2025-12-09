@@ -4,8 +4,8 @@ import torch.nn.functional as F
 from torch.optim import Adam
 
 from config.mappo_config import MAPPOConfig
-from networks.policy import CategoricalPolicy
-from networks.value import CentralValue
+from networks.policy import Policy
+from networks.value import Value
 from buffer.rollout_buffer import RolloutBuffer
 
 class Agent:
@@ -14,9 +14,9 @@ class Agent:
         self.device = device
 
         # Shared policy for all agents
-        self.policy = CategoricalPolicy(obs_dim, act_dim).to(device)
+        self.policy = Policy(obs_dim, act_dim).to(device)
         # Centralized critic (state_dim = num_agents * obs_dim here)
-        self.value_fn = CentralValue(state_dim=num_agents * obs_dim).to(device)
+        self.value_fn = Value(state_dim=num_agents * obs_dim).to(device)
 
         self.optim = Adam(
             list(self.policy.parameters()) + list(self.value_fn.parameters()),
